@@ -79,26 +79,34 @@
   button.secondary { background: var(--pgcn-gold); color: #1a1a1a; border: none; font-weight: bold; }
   button.secondary:hover { background: #d98f13; }
 
-  .main-area { display: flex; flex-direction: column; gap: 18px; margin-top: 18px; align-items: center; }
+  .main-area {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-top: 18px;
+    align-items: center;
+  }
 
   #crossword-wrap {
     width: 100%;
-    overflow-x: auto;
     display: flex;
     justify-content: center;
-    padding-bottom: 6px;
   }
   #crossword {
     display: grid;
     gap: 1px;
     background: #d7ded5;
     border: 2px solid var(--pgcn-green);
+    width: min(100%, 620px);
+    /* aspect-ratio is set dynamically per puzzle (cols/rows) so cells stay
+       perfectly square and the full grid always fits its container width,
+       regardless of how many columns this round's layout produced. */
   }
   .xcell {
-    width: 26px; height: 26px;
     background: #f7f9f6;
     position: relative;
     display: flex; align-items: center; justify-content: center;
+    min-width: 0; min-height: 0;
   }
   .xcell.block { background: transparent; border: none; }
   .xcell input {
@@ -106,7 +114,7 @@
     border: none; background: transparent;
     text-align: center; text-transform: uppercase;
     font-family: 'Times New Roman', Times, serif;
-    font-weight: bold; font-size: 14px;
+    font-weight: bold; font-size: 1em;
     padding: 0; margin: 0;
     color: #1a1a1a;
   }
@@ -114,8 +122,8 @@
   .xcell .xnum {
     position: absolute; top: 0px; left: 1px;
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 9px; font-weight: bold; color: #444;
-    letter-spacing: 0.4px;
+    font-size: 0.5em; font-weight: bold; color: #444;
+    letter-spacing: 0.3px;
     white-space: nowrap;
     line-height: 1;
     pointer-events: none;
@@ -188,8 +196,22 @@
     header { padding: 16px 14px; }
     header h1 { font-size: 20px; }
     .header-logo { width: 40px; height: 40px; }
-    .xcell { width: 23px; height: 23px; }
-    .xcell input { font-size: 11px; }
+  }
+
+  /* Tablet and desktop: place the crossword and clue list side by side.
+     #crossword-wrap's width comes from the flex algorithm dividing up
+     .main-area's own actual width, never from viewport units, so this
+     cannot spill into the clue panel the way an earlier build once did. */
+  @media (min-width: 900px) {
+    .main-area {
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    #crossword-wrap { flex: 1 1 0; min-width: 0; justify-content: flex-end; padding-right: 8px; }
+    #crossword { width: min(100%, 640px); }
+    #clue-panel { flex: 0 0 380px; max-width: 380px; }
+    #learning-card { order: 3; flex: 0 0 100%; max-width: 640px; }
   }
 </style>
 </head>
@@ -603,6 +625,13 @@ function renderGrid() {
   const gridEl = document.getElementById('crossword');
   gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   gridEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+  // Locking the container's aspect ratio to cols/rows means the browser
+  // computes its height purely from its own width, and since 1fr tracks
+  // divide that width and height evenly, every cell comes out square
+  // automatically — regardless of how many columns this round's layout
+  // produced, and without ever needing a fixed pixel size that could
+  // overflow a narrow screen or a wide-column puzzle.
+  gridEl.style.aspectRatio = `${cols} / ${rows}`;
   gridEl.innerHTML = '';
 
   for (let r = 0; r < rows; r++) {
@@ -636,6 +665,23 @@ function renderGrid() {
       gridEl.appendChild(div);
     }
   }
+
+  scaleGridFont(gridEl);
+  window.addEventListener('resize', () => scaleGridFont(gridEl), { passive: true });
+}
+
+// Reads the actual rendered size of one cell (after real layout) and sets
+// the grid container's own font-size accordingly. Input text (1em) and
+// clue numbers (0.5em) are defined relative to that, so they scale
+// correctly with the true on-screen cell size on any device — phone,
+// tablet, or desktop — rather than guessing via viewport-width breakpoints.
+function scaleGridFont(gridEl) {
+  const sampleCell = gridEl.querySelector('.xcell:not(.block)');
+  if (!sampleCell) return;
+  const rect = sampleCell.getBoundingClientRect();
+  if (!rect.width) return; // headless/test environment with no real layout — skip safely
+  const fontSize = Math.max(8, Math.min(20, rect.width * 0.5));
+  gridEl.style.fontSize = fontSize + 'px';
 }
 
 function renderClues() {
